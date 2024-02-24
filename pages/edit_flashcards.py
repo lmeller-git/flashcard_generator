@@ -10,7 +10,7 @@ from os import listdir
 st.title("Flashcard editor")
 st.error("currently under construction")
 saved_cards = st.selectbox(label = "which cards do yu want to look at", options=["new flashcards", "edited flashcards"])
-
+save_data = st.toggle(label = "save data to train the model", key = "data_saver")
 
 if saved_cards == "edited flashcards":
     DECK_SAVE_PATH = Path("edited_decks")
@@ -102,7 +102,49 @@ with form:
     if submitter:
         pass
 
-def save_deck(cards = flashcards, deck_name = deck_name, excluded = excluded):
+def save_deck(cards = flashcards, deck_name = deck_name, excluded = excluded, save_data = save_data):
+    
+    images = [card["image"] for i, card in enumerate(cards) if not excluded[i]]
+    
+    texts = [{"front": card["front"], "back": card["back"]} for i, card in enumerate(cards) if not excluded[i]]
+    
+    def save_training_data(images, excluded):
+        
+        TRAINING_DATA_DIR = Path("training_data")
+        
+        if not TRAINING_DATA_DIR.exists():
+            TRAINING_DATA_DIR.mkdir(parents=True)
+        
+        TRAINING_LABEL_SAVE_PATH = TRAINING_DATA_DIR / "labels.json"
+        TRAINING_IMAGE_SAVE_DIR = TRAINING_DATA_DIR / "Images"
+        
+        if not TRAINING_IMAGE_SAVE_DIR.exists():
+            TRAINING_IMAGE_SAVE_DIR.mkdir(parents=True)
+        
+        num_of_img = len(listdir(TRAINING_IMAGE_SAVE_DIR))
+        
+        # make data
+        if not TRAINING_LABEL_SAVE_PATH.exists():
+            labels = {}
+            for i in range(len(images)):
+                labels.update({f"Image_{i + num_of_img}.png": not excluded[i]}) 
+        else:
+            with open(TRAINING_LABEL_SAVE_PATH, "r+") as f:
+                labels = json.load(f)
+            for i in range(len(images)):
+                labels.update({f"Image_{i + num_of_img}.png": not excluded[i]}) 
+
+        
+        with open(f"{TRAINING_LABEL_SAVE_PATH}", "w") as f:
+            json.dump(labels, f, ensure_ascii=False)
+            
+        for i, image in enumerate(images):
+            IMAGE_SAVE_PATH_FOR_TRAINING = f"training_data/Images/image_{i + num_of_img}.png"
+            image = image.save(fp = IMAGE_SAVE_PATH_FOR_TRAINING, format = "PNG")
+    
+    if save_data:
+        save_training_data(images, excluded)
+    
     
     DECK_DIR = Path("edited_decks")
     if not DECK_DIR.exists():
@@ -116,10 +158,7 @@ def save_deck(cards = flashcards, deck_name = deck_name, excluded = excluded):
                 shutil.rmtree(path)  
             else:
                 raise ValueError("{} is not a file or dir.".format(path))
-    
-    images = [card["image"] for i, card in enumerate(cards) if not excluded[i]]
-    
-    texts = [{"front": card["front"], "back": card["back"]} for i, card in enumerate(cards) if not excluded[i]]
+            
 
     DECK_SAVE_PATH = DECK_DIR / f"{deck_name}"
     if not DECK_SAVE_PATH.exists():
@@ -136,15 +175,26 @@ def save_deck(cards = flashcards, deck_name = deck_name, excluded = excluded):
     with open(TEXT_SAVE_PATH, "w") as f:
         json.dump(texts, f, ensure_ascii=False, indent = 4)
 
+def delete_training_data():
+    DECK_DIR = Path("training_data")
+    for path_ in listdir(DECK_DIR):
+        path = DECK_DIR / path_
+        if os.path.isfile(path) or os.path.islink(path):
+            os.remove(path)  
+        elif os.path.isdir(path):
+            shutil.rmtree(path)  
+        else:
+            raise ValueError("{} is not a file or dir.".format(path))
 
-col1, col2, col3 = st.columns(3)
+col1, col2, col3, col4 = st.columns(4)
 with col1:
     reset_button = st.button(label = "delete saved decks", on_click=delete_cards)
 with col2:
     downloader_ = st.button(label = "download cards to anki")  
 with col3:
     save = st.button(label = "save deck", on_click=save_deck)
-
+with col4:
+    delete_train_data = st.button(label = "delete training data", on_click=delete_training_data)
 
 if downloader_:
     downloader(deck_name=deck_name)
