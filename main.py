@@ -21,6 +21,8 @@ with col3:
     save_cards = st.toggle("locally save created cards for editing")
     delete_cards = st.button("delete stored cards")
 
+model = st.selectbox(label = "which model do you want to use", options = ["pretrained", "custom trained"])
+
 file_large = st.file_uploader("Here you can upload one or multiple pdf files with large amount of text", type="pdf", accept_multiple_files=True)
 submitter = st.empty()
 submitter_small = False
@@ -69,7 +71,7 @@ if delete_cards:
 
 
     
-def flashcards_from_large_file(file_, deck_name, mode):
+def flashcards_from_large_file(file_, deck_name, mode, model):
     flashcards = []
     image_bytes_ = []
     for file in file_:
@@ -78,7 +80,7 @@ def flashcards_from_large_file(file_, deck_name, mode):
         error_box_2 = st.empty()
         
         try:
-            text, decision, _image_bytes, images = process_large_pdf(file)
+            text, decision, _image_bytes, images = process_large_pdf(file, model)
         except:
             error_box_2.error("Error processing PDF, please make sure it is a valid PDF file.")
             text = []
@@ -149,7 +151,7 @@ if submitter_large:
     else:
         deck_name = "MyStreamlitDeck"
     with form_box:
-        flashcards, image_bytes, images = flashcards_from_large_file(file_large, deck_name, continue_upon_exception)
+        flashcards, image_bytes, images = flashcards_from_large_file(file_large, deck_name, continue_upon_exception, model)
         st.write("flashcards")
         st.write(flashcards)
     

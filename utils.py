@@ -1,7 +1,8 @@
 import fitz
 from io import BytesIO
 import torch
-from models_ import model_decide
+from utils_for_models import load_state_dict_2
+from models_ import PageDecider
 from torchvision.transforms import v2
 from PIL import Image
 import requests
@@ -9,7 +10,14 @@ import base64
 
 
 
-def process_large_pdf(file):
+def process_large_pdf(file, model):
+    deciding_model = PageDecider(3, 120, 2, 3, 3)
+    if model == "original":
+        deciding_model = load_state_dict_2(deciding_model, "models/page_decider_2.pth")
+    elif model == "custom":
+        deciding_model = load_state_dict_2(deciding_model, "models/new_page_decider.pth")
+    deciding_model.eval()
+
     with fitz.open(stream = file.read(), filetype = "pdf") as doc:
         text = []
         images = []
@@ -20,7 +28,7 @@ def process_large_pdf(file):
             text.append(split_text(page.get_text()))
             images.append(pix_to_image(page.get_pixmap()))
             image_bytes.append(pixmap_to_bytes(pixmap))
-            decisions.append(page_decision(px_to_image(pixmap)))
+            decisions.append(page_decision(px_to_image(pixmap)), deciding_model)
             if i > 10 :
                 break
     return text, decisions, image_bytes, images
@@ -42,14 +50,14 @@ def split_text(text):
     return text_splits
 
 
-def page_decision(page):
+def page_decision(page, model):
     transform = v2.Compose([
     v2.Resize(size=(64,64), antialias=True),
     v2.ToDtype(torch.float32, scale=True)
     ])
     _page = transform(page)
     with torch.inference_mode():
-        logits = model_decide(_page.unsqueeze(dim=0))
+        logits = model(_page.unsqueeze(dim=0))
         probs = torch.softmax(logits.squeeze(), dim=0)
         pred = torch.argmax(probs, dim=0)
     return bool(pred)

@@ -8,7 +8,8 @@ import random
 import json
 from torch import nn
 import csv
-from models_ import PageDecider
+from models_ import PageDecider, model_decide
+import shutil
 
 st.title("Train the model on your data")
 st.error("currently under construction")
@@ -18,6 +19,8 @@ BATCH_SIZE = 10
 EPOCHS = 10
 train_split = 0.8
 model = PageDecider(3, 120, 2, 3, 3).to(device)
+old_model = PageDecider(3, 120, 2, 3, 3).to(device)
+
 
 TRAINING_DATA_PATH = Path("training_data")
 TRAINING_IMAGES_PATH = TRAINING_DATA_PATH / "Images"
@@ -33,18 +36,6 @@ PROCESSED_LABELS_TEST_PATH = PROCESSED_DATA_TEST_PATH / "labels.csv"
 
 if not PROCESSED_DATA.exists():
     PROCESSED_DATA.mkdir(parents=True)
-
-if not PROCESSED_DATA_TRAIN_PATH.exists():
-    PROCESSED_DATA_TRAIN_PATH.mkdir(parents=True)
-
-if not PROCESSED_DATA_TEST_PATH.exists():
-    PROCESSED_DATA_TEST_PATH.mkdir(parents=True)
-
-if not PROCESSED_IMAGES_TRAIN_PATH.exists():
-    PROCESSED_IMAGES_TRAIN_PATH.mkdir(parents=True)
-
-if not PROCESSED_IMAGES_TEST_PATH.exists():
-    PROCESSED_IMAGES_TEST_PATH.mkdir(parents=True)
 
 
 transform = v2.Compose([
@@ -102,7 +93,30 @@ def mingle_data(images, labels):
 
     return  images, labels
 
-if st.button("save data"):
+def training_loop_3(epochs: int, model: torch.nn.Module, criterion: torch.nn.Module, optimizer: torch.nn.Module, train_data: torch.Tensor, test_data: torch.Tensor, device = "cpu", data_loader = DataLoader, batch_size: int = 1, shuffle = True, output = None, performance_tracker = None, tracked_performance: str = None, input_to_performance_tracker = None, y = lambda x: x, x = lambda x: x):
+    progress_text = f"Training model for {epochs} epochs. Please wait..."
+    progress_bar = st.progress(0, text = "training model")
+    train_dataloader = data_loader(dataset=train_data, batch_size=batch_size, shuffle=shuffle)
+    test_dataloader = data_loader(dataset=test_data, batch_size=batch_size, shuffle=shuffle)
+    if output is None:
+        output = lambda x: model(x)
+    for epoch in range(epochs):
+        train_loss = 0
+        for batch, (x_train, y_train) in enumerate(train_dataloader): 
+            x_train, y_train = x(x_train).to(device), y(y_train).to(device)
+            model.train()
+            y_pred = output(x_train)
+            loss = criterion(y_pred, y_train)
+            train_loss += loss
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+        progress_bar.progress(epoch / epochs, text = progress_text)
+        
+    progress_bar.empty()
+
+
+if st.button("generate and save training + testing data"):
     images, labels = mingle_data(images, labels)
 
     train_cutoff = int(train_split * len(images))
@@ -111,6 +125,27 @@ if st.button("save data"):
     test_images = images[train_cutoff:]
     test_labels = dict(list(labels.items())[:train_cutoff])
     
+    if PROCESSED_DATA.exists():
+        for path_ in listdir(PROCESSED_DATA):
+            path = PROCESSED_DATA / path_
+            if os.path.isfile(path) or os.path.islink(path):
+                os.remove(path)  
+            elif os.path.isdir(path):
+                shutil.rmtree(path)  
+            else:
+                raise ValueError("{} is not a file or dir.".format(path))
+    
+    if not PROCESSED_DATA_TRAIN_PATH.exists():
+        PROCESSED_DATA_TRAIN_PATH.mkdir(parents=True)
+
+    if not PROCESSED_DATA_TEST_PATH.exists():
+        PROCESSED_DATA_TEST_PATH.mkdir(parents=True)
+
+    if not PROCESSED_IMAGES_TRAIN_PATH.exists():
+        PROCESSED_IMAGES_TRAIN_PATH.mkdir(parents=True)
+
+    if not PROCESSED_IMAGES_TEST_PATH.exists():
+        PROCESSED_IMAGES_TEST_PATH.mkdir(parents=True)
 
     with open(PROCESSED_LABELS_TRAIN_PATH, "w") as f:
         write = csv.writer(f)
@@ -129,6 +164,12 @@ if st.button("save data"):
         PROCESSED_IMAGE_SAVE_PATH_FOR_TESTING = f"processed_data/test_data/images/{list(test_labels.keys())[i]}"
         image = image.save(fp = PROCESSED_IMAGE_SAVE_PATH_FOR_TESTING, format = "PNG")
 
+with st.form("parameters"):
+    batch_size = st.slider("Batch Size", 1, 100, value = BATCH_SIZE )
+    epochs = st.slider("Epochs", 5, 100, value = EPOCHS)
+    learning_rate = st.slider("learning rate", 1, 5, value = 1) * 10 ** -4
+    if st.form_submit_button("Submit"):
+        pass
 
 if st.button("train ai"):
 
@@ -141,15 +182,26 @@ if st.button("train ai"):
                     transform)
 
     criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
+    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
     acc_pre_training = accuracy(model, test_data, device=device)
 
-    training_loop_2(EPOCHS, model, criterion, optimizer, train_data, test_data, device, batch_size=BATCH_SIZE)
+    training_loop_3(epochs, model, criterion, optimizer, train_data, test_data, device, batch_size=batch_size)
 
     acc_post_training = accuracy(model, test_data, device=device)
 
-    st.write("acc_pre_training: ", acc_pre_training," | ", "acc_post_training: ", acc_post_training)
+    try:
+        old_model = load_state_dict_2(old_model, "models/new_page_decider.pth")
+        old_model_acc = accuracy(old_model, test_data, device = device)
+    except:
+        old_model_acc = 0
+    
+    original_acc = accuracy(model_decide.to(device), test_data, device=device)
 
-    save_function(model, "new_page_decider.pth")
-    st.write("new model saved succesfully as new_page_decider.pth in models")
+    st.write("acc pre training: ", acc_pre_training," | ", "acc post training: ", acc_post_training, " | ", "acc of old model: ", old_model_acc, " | ", "acc of original model: ", original_acc)
+
+    if acc_post_training > acc_pre_training and acc_post_training > old_model_acc:
+        save_function(model.state_dict(), "new_page_decider.pth")
+        st.write("new model saved succesfully as new_page_decider.pth in models")
+    else:
+        st.write("model was not saved, due to bad performance")
