@@ -28,7 +28,7 @@ def process_large_pdf(file, model):
             text.append(split_text(page.get_text()))
             images.append(pix_to_image(page.get_pixmap()))
             image_bytes.append(pixmap_to_bytes(pixmap))
-            decisions.append(page_decision(px_to_image(pixmap)), deciding_model)
+            decisions.append(page_decision(px_to_image(pixmap), deciding_model))
             if i > 10 :
                 break
     return text, decisions, image_bytes, images
