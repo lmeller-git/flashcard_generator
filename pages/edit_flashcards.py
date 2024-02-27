@@ -43,11 +43,10 @@ with open(CARD_SAVE_PATH, 'r') as f:
 
 flashcards = [{"front": card["front"], "back": card["back"], "image": Image.open(f"{DECKS}/{deck_name}/Images/image_{i}.png")} for i, card in enumerate(cards)]
 
-def delete_cards(DIR: str = "edited_decks"):
+def delete_cards(Path: Path):
     
-    DECK_DIR = Path(DIR)
-    for path_ in listdir(DECK_DIR):
-        path = DECK_DIR / path_
+    for path_ in listdir(Path):
+        path = Path / path_
         if os.path.isfile(path) or os.path.islink(path):
             os.remove(path)  
         elif os.path.isdir(path):
@@ -149,9 +148,12 @@ def save_deck(cards = flashcards, deck_name = deck_name, excluded = excluded, sa
     DECK_DIR = Path("edited_decks")
     if not DECK_DIR.exists():
         DECK_DIR.mkdir(parents=True)
-    elif DECK_DIR.exists():
-        for path_ in listdir(DECK_DIR):
-            path = DECK_DIR / path_
+    SAVE_PATH = DECK_DIR / deck_name
+    if not SAVE_PATH.exists():
+        SAVE_PATH.mkdir(parents=True)
+    elif SAVE_PATH.exists():
+        for path_ in listdir(SAVE_PATH):
+            path = SAVE_PATH / path_
             if os.path.isfile(path) or os.path.islink(path):
                 os.remove(path)  
             elif os.path.isdir(path):
@@ -188,13 +190,21 @@ def delete_training_data():
 
 col1, col2, col3, col4 = st.columns(4)
 with col1:
-    reset_button = st.button(label = "delete saved decks", on_click=delete_cards)
+    cards_to_delete = st.selectbox("Select a specific deck to delete", options = ["All", *listdir(Path("edited_decks"))])
+    reset_button = st.button(label = "delete saved decks")
 with col2:
     downloader_ = st.button(label = "download cards to anki")  
 with col3:
     save = st.button(label = "save deck", on_click=save_deck)
 with col4:
     delete_train_data = st.button(label = "delete training data", on_click=delete_training_data)
+
+if  reset_button:
+    if cards_to_delete == "All":
+        delete_cards(Path("edited_decks"))
+    else:
+        delete_cards(Path("edited_decks") / cards_to_delete)
+        shutil.rmtree(Path("edited_decks") / cards_to_delete)
 
 if downloader_:
     downloader(deck_name=deck_name)

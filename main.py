@@ -10,7 +10,7 @@ from os import listdir
 
 st.title("Flashcard Generator")
 st.header("upload pdf files for automated generation of an anki deck based on these")
-
+DECK_DIR = Path("new_decks")
 prompt = st.text_input("Here you can input the name of your anki deck")
 col1, col2, col3 = st.columns(3) 
 with col1:
@@ -20,6 +20,7 @@ with col2:
 with col3:
     save_cards = st.toggle("locally save created cards for editing")
     delete_cards = st.button("delete stored cards")
+    cards_to_delete = st.selectbox("Select a specific deck to delete", options = ["All", *listdir(DECK_DIR)])
 
 model = st.selectbox(label = "which model do you want to use", options = ["pretrained", "custom trained"])
 
@@ -34,7 +35,7 @@ submitter_large = submitter.button("submit pdf")
 error_box = st.empty()
 form_box = st.form("main_form", clear_on_submit=True)
 
-DECK_DIR = Path("new_decks")
+
 if not DECK_DIR.exists():
     DECK_DIR.mkdir(parents=True)
 
@@ -59,15 +60,22 @@ def save_deck(cards, deck_name: str = "MyStreamlitDeck"):
     with open(TEXT_SAVE_PATH, "w") as f:
         json.dump(texts, f, ensure_ascii=False, indent = 4)
 
-if delete_cards:
-    for path_ in listdir(DECK_DIR):
-        path = DECK_DIR / path_
+def delete_deck(Path):
+    for path_ in listdir(Path):
+        path = Path / path_
         if os.path.isfile(path) or os.path.islink(path):
-            os.remove(path)
+            os.remove(path)  # remove the file
         elif os.path.isdir(path):
-            shutil.rmtree(path) 
+            shutil.rmtree(path)  # remove dir and all contains
         else:
             raise ValueError("file {} is not a file or dir.".format(path))
+
+if delete_cards:
+    if cards_to_delete == "All":
+        delete_deck(DECK_DIR)
+    else:
+        delete_deck(DECK_DIR / cards_to_delete)
+        shutil.rmtree(DECK_DIR / cards_to_delete)
 
 
     
