@@ -62,16 +62,18 @@ def mingle_data(images, labels):
         v2.ColorJitter(0.5, 0.2, 0.5),
         v2.RandomGrayscale(0.2)
     ])
+    num_of_images = len(images)
     if delta_yes_no < 0: # more 'No' labels than 'Yes'
         while len(new_data) < abs(delta_yes_no):
             for i, decision in enumerate(labels.values()):
-                if decision is False:
+                if decision is True:
                     new_data.append(transform(images[i]))
-                    new_labels.update({f"Image_{i + len(images) - 1 + len(new_data)}.png": True})
-                elif decision is True:
+                    new_labels.update({f"Image_{num_of_images}.png": True})
+                    num_of_images += 1
+                elif decision is False:
                     if random.random() < abs(delta_yes_no) / len(labels) * 2:
                         images[i] = transform(images[i])
-                if len(new_data) == abs(delta_yes_no) + 1:
+                if len(new_data) == abs(delta_yes_no):
                     break
         images.append(new_data)
         labels.update(new_labels)
@@ -79,13 +81,14 @@ def mingle_data(images, labels):
     elif delta_yes_no > 0:  # more 'Yes' labels than 'No'
         while len(new_data) < abs(delta_yes_no):
             for i, decision in enumerate(labels.values()):
-                if decision is True:
+                if decision is False:
                     new_data.append(transform(images[i]))
-                    new_labels.update({f"Image_{i + len(images) - 1 + len(new_data)}.png": False})
-                elif decision is False:
+                    new_labels.update({f"Image_{num_of_images}.png": False})
+                    num_of_images += 1
+                elif decision is True:
                     if random.random() < abs(delta_yes_no) / len(labels) * 2:
                         images[i] = transform(images[i])
-                if len(new_data) == delta_yes_no + 1:
+                if len(new_data) == delta_yes_no:
                     break
         images += new_data
         labels.update(new_labels)
