@@ -20,6 +20,11 @@ EPOCHS = 10
 train_split = 0.8
 model = PageDecider(3, 120, 2, 3, 3).to(device)
 old_model = PageDecider(3, 120, 2, 3, 3).to(device)
+PATH_TO_MODEL  = Path("models") / "new_page_decider.pth"
+if PATH_TO_MODEL.exists():
+    model = load_state_dict_2(model, "models/new_page_decider.pth")
+else:
+    model = load_state_dict_2(model, "models/page_decider_2.pth")
 
 
 TRAINING_DATA_PATH = Path("training_data")
@@ -123,7 +128,7 @@ if st.button("generate and save training + testing data"):
     train_images = images[:train_cutoff]
     train_labels = dict(list(labels.items())[:train_cutoff])
     test_images = images[train_cutoff:]
-    test_labels = dict(list(labels.items())[:train_cutoff])
+    test_labels = dict(list(labels.items())[train_cutoff:])
     
     if PROCESSED_DATA.exists():
         for path_ in listdir(PROCESSED_DATA):
@@ -163,6 +168,11 @@ if st.button("generate and save training + testing data"):
     for i, image in enumerate(train_images):
         PROCESSED_IMAGE_SAVE_PATH_FOR_TESTING = f"processed_data/test_data/images/{list(test_labels.keys())[i]}"
         image = image.save(fp = PROCESSED_IMAGE_SAVE_PATH_FOR_TESTING, format = "PNG")
+
+if st.button("delete new model"):
+    if PATH_TO_MODEL.exists():
+        os.remove(PATH_TO_MODEL)
+
 
 with st.form("parameters"):
     batch_size = st.slider("Batch Size", 1, 100, value = BATCH_SIZE )
