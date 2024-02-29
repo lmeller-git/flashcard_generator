@@ -54,7 +54,7 @@ with open(TRAINING_LABELS_PATH, "r") as f:
     labels = json.load(f)
 
 
-def mingle_data(images, labels):
+def wrangle_data(images, labels):
     delta_yes_no = sum(labels.values()) - len(labels) / 2
     new_data = []
     new_labels = {}
@@ -125,7 +125,7 @@ def training_loop_3(epochs: int, model: torch.nn.Module, criterion: torch.nn.Mod
 
 
 if st.button("generate and save training + testing data"):
-    images, labels = mingle_data(images, labels)
+    images, labels = wrangle_data(images, labels)
 
     train_cutoff = int(train_split * len(images))
     train_images = images[:train_cutoff]
