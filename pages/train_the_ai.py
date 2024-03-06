@@ -2,6 +2,7 @@ import streamlit as st
 from os import listdir
 from pathlib import Path
 from utils_for_models import *
+from utils import *
 from PIL import Image
 from torchvision.transforms import v2
 import random
@@ -34,10 +35,12 @@ TRAINING_LABELS_PATH = TRAINING_DATA_PATH / "labels.json"
 PROCESSED_DATA = Path("processed_data")
 PROCESSED_DATA_TRAIN_PATH = PROCESSED_DATA / "train_data"
 PROCESSED_DATA_TEST_PATH = PROCESSED_DATA / "test_data"
-PROCESSED_IMAGES_TRAIN_PATH =  PROCESSED_DATA_TRAIN_PATH / "images"
-PROCESSED_IMAGES_TEST_PATH =  PROCESSED_DATA_TEST_PATH / "images"
+PROCESSED_IMAGES_TRAIN_PATH = PROCESSED_DATA_TRAIN_PATH / "images"
+PROCESSED_IMAGES_TEST_PATH = PROCESSED_DATA_TEST_PATH / "images"
 PROCESSED_LABELS_TRAIN_PATH = PROCESSED_DATA_TRAIN_PATH / "labels.csv"
 PROCESSED_LABELS_TEST_PATH = PROCESSED_DATA_TEST_PATH / "labels.csv"
+PROCESSED_IMAGE_SAVE_PATH_FOR_TRAINING_FROM_SVD = PROCESSED_DATA_TRAIN_PATH / "images_for_training"
+PROCESSED_IMAGE_SAVE_PATH_FOR_TESTING_FROM_SVD = PROCESSED_DATA_TEST_PATH / "images_for_training"
 
 if not PROCESSED_DATA.exists():
     PROCESSED_DATA.mkdir(parents=True)
@@ -47,20 +50,27 @@ transform = v2.Compose([
     v2.Resize(size=(64,64), antialias=True)
 ])
 
-
-images = [Image.open(f"training_data/Images/{i}") for i in listdir(TRAINING_IMAGES_PATH)]
+try:
+    images = [Image.open(f"training_data/Images/{file}") for file in list(os.walk(TRAINING_IMAGES_PATH))[0][2]]
+except:
+    st.error("no training data available")
+    st.stop()
 
 with open(TRAINING_LABELS_PATH, "r") as f:
     labels = json.load(f)
 
 
 def wrangle_data(images, labels):
-    delta_yes_no = sum(labels.values()) - len(labels) / 2
+    delta_yes_no = sum(labels.values()) - len(labels)
+    if delta_yes_no == 0 or delta_yes_no == len(labels):
+        st.error("the data conatains only pages labeld with True or False. It needs to contain a mix of both.")
+        st.stop()
     new_data = []
     new_labels = {}
     transform = v2.RandomApply([
         v2.ColorJitter(0.5, 0.2, 0.5),
-        v2.RandomGrayscale(0.2)
+        v2.RandomHorizontalFlip(0.3),
+        v2.RandomVerticalFlip(0.3)
     ])
     num_of_images = len(images)
     if delta_yes_no < 0: # more 'No' labels than 'Yes'
@@ -75,7 +85,7 @@ def wrangle_data(images, labels):
                         images[i] = transform(images[i])
                 if len(new_data) == abs(delta_yes_no):
                     break
-        images.append(new_data)
+        images += new_data
         labels.update(new_labels)
 
     elif delta_yes_no > 0:  # more 'Yes' labels than 'No'
@@ -123,8 +133,14 @@ def training_loop_3(epochs: int, model: torch.nn.Module, criterion: torch.nn.Mod
         
     progress_bar.empty()
 
+col1, col2 = st.columns(2)
+with col1:
+    generator = st.button("generate and save training + testing data")
+with col2:
+    eraser = st.selectbox("choose data to delete", ["all", "all images_for_training", *listdir(PROCESSED_DATA), *listdir(PROCESSED_DATA_TRAIN_PATH)])
+    delete_stuff_button = st.button("delete selected data")
 
-if st.button("generate and save training + testing data"):
+if generator:
     images, labels = wrangle_data(images, labels)
 
     train_cutoff = int(train_split * len(images))
@@ -163,18 +179,26 @@ if st.button("generate and save training + testing data"):
         write = csv.writer(f)
         write.writerows(test_labels.items())
 
-
-    for i, image in enumerate(train_images):
-        PROCESSED_IMAGE_SAVE_PATH_FOR_TRAINING = f"processed_data/train_data/images/{list(train_labels.keys())[i]}"
-        image = image.save(fp = PROCESSED_IMAGE_SAVE_PATH_FOR_TRAINING, format = "PNG")
+    SVD_wrapper(train_images, 200, "with_color", PROCESSED_DATA / "train_data" / "images", list(train_labels.keys()))
     
-    for i, image in enumerate(train_images):
-        PROCESSED_IMAGE_SAVE_PATH_FOR_TESTING = f"processed_data/test_data/images/{list(test_labels.keys())[i]}"
-        image = image.save(fp = PROCESSED_IMAGE_SAVE_PATH_FOR_TESTING, format = "PNG")
+    SVD_wrapper(test_images, 200, "with_color", PROCESSED_DATA / "test_data" / "images", list(test_labels.keys()))
 
-if st.button("delete new model"):
-    if PATH_TO_MODEL.exists():
-        os.remove(PATH_TO_MODEL)
+if delete_stuff_button:
+    if eraser == "all":
+        delete_stuff(PROCESSED_DATA)
+    elif eraser == "all images_for_training":
+        delete_stuff(PROCESSED_IMAGE_SAVE_PATH_FOR_TRAINING_FROM_SVD)
+        delete_stuff(PROCESSED_IMAGE_SAVE_PATH_FOR_TESTING_FROM_SVD)
+    else:
+        delete_stuff(PROCESSED_DATA_TRAIN_PATH / eraser)
+        delete_stuff(PROCESSED_DATA_TEST_PATH / eraser)
+
+col3, col4 = st.columns(2)
+
+with col3:
+    if st.button("delete new model"):
+        if PATH_TO_MODEL.exists():
+            os.remove(PATH_TO_MODEL)
 
 
 with st.form("parameters"):
@@ -185,6 +209,40 @@ with st.form("parameters"):
         pass
 
 if st.button("train ai"):
+    if not PROCESSED_IMAGE_SAVE_PATH_FOR_TRAINING_FROM_SVD.exists():
+        PROCESSED_IMAGE_SAVE_PATH_FOR_TRAINING_FROM_SVD.mkdir(parents=True, exist_ok=True)
+    else:
+        for path_ in listdir(PROCESSED_IMAGE_SAVE_PATH_FOR_TRAINING_FROM_SVD):
+            path = PROCESSED_IMAGE_SAVE_PATH_FOR_TRAINING_FROM_SVD / path_
+            if os.path.isfile(path) or os.path.islink(path):
+                os.remove(path)  
+            elif os.path.isdir(path):
+                shutil.rmtree(path)  
+            else:
+                raise ValueError("{} is not a file or dir.".format(path))
+            
+    if not PROCESSED_IMAGE_SAVE_PATH_FOR_TESTING_FROM_SVD.exists():
+        PROCESSED_IMAGE_SAVE_PATH_FOR_TESTING_FROM_SVD.mkdir(parents=True, exist_ok=True)
+    else:
+        for path_ in listdir(PROCESSED_IMAGE_SAVE_PATH_FOR_TESTING_FROM_SVD):
+            path = PROCESSED_IMAGE_SAVE_PATH_FOR_TESTING_FROM_SVD / path_
+            if os.path.isfile(path) or os.path.islink(path):
+                os.remove(path)  
+            elif os.path.isdir(path):
+                shutil.rmtree(path)  
+            else:
+                raise ValueError("{} is not a file or dir.".format(path))
+
+    train_images = load_SVD(PROCESSED_IMAGES_TRAIN_PATH, {})
+    test_images = load_SVD(PROCESSED_IMAGES_TEST_PATH, {})
+
+    for i, image in enumerate(list(train_images.items())):
+        PROCESSED_IMAGE_SAVE_PATH_FOR_TRAINING = f"processed_data/train_data/images_for_training/{list(train_images.keys())[i]}.png"
+        image = image[1].save(fp = PROCESSED_IMAGE_SAVE_PATH_FOR_TRAINING, format = "PNG")
+
+    for i, image in enumerate(list(test_images.items())):
+        PROCESSED_IMAGE_SAVE_PATH_FOR_TESTING = f"processed_data/test_data/images_for_training/{list(test_images.keys())[i]}.png"
+        image = image[1].save(fp = PROCESSED_IMAGE_SAVE_PATH_FOR_TESTING, format = "PNG")
 
     train_data = ppp_files("processed_data/train_data/labels.csv",
                     "processed_data/train_data/images",

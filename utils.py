@@ -7,7 +7,9 @@ from torchvision.transforms import v2
 from PIL import Image
 import requests
 import base64
-
+import os
+import shutil
+from pathlib import Path
 
 
 def process_large_pdf(file, model):
@@ -49,7 +51,6 @@ def split_text(text):
         return [["."]]
     return text_splits
 
-
 def page_decision(page, model):
     transform = v2.Compose([
     v2.Resize(size=(64,64), antialias=True),
@@ -81,6 +82,80 @@ def pixmap_to_bytes(pixmap):
     image.save(image_bytes, format="PNG") 
     base64_string = base64.b64encode(image_bytes.getvalue()).decode("utf-8")
     return base64_string
+
+def SVD(image_tensor, CUTOFF):
+    U, sigma, Vt = torch.linalg.svd(image_tensor)
+    U_new = U[:,:CUTOFF]
+    VT_new = Vt[:CUTOFF,:]
+    sigma_new = torch.tensor([sigma[i] for i in range(CUTOFF)])
+    return U_new, sigma_new, VT_new
+
+def SVD_wrapper(images: Image, CUTOFF: int, colormode: str = "grayscale", SAVE_PATH: Path = Path("compressed_images"), PATH_TO_IMAGE : list = None):
+    if not SAVE_PATH.exists():
+        SAVE_PATH.mkdir(parents=True, exist_ok=True)
+    else:
+        delete_stuff(SAVE_PATH)
+                
+    if colormode == "grayscale":
+        transform = v2.Compose([v2.Resize((64,64)),
+                                v2.Grayscale(),
+                                v2.PILToTensor()])
+    else:
+        transform = v2.Compose([v2.Resize((64,64)),
+                                v2.PILToTensor()])
+    
+    SVD_data = []
+    for i, image in enumerate(images):
+        image_tensor = transform(image)
+        image_tensor = image_tensor.squeeze() / 255
+        if colormode == "grayscale":
+            SVD_data.append([(SVD(image_tensor, CUTOFF))])
+        else:
+            color_data = []
+            for i in range(3):
+                color_data.append((SVD(image_tensor[i], CUTOFF)))
+            SVD_data.append(color_data)
+    
+    for i, image in enumerate(SVD_data):
+        if PATH_TO_IMAGE:
+            IMAGE_SAVE_PATH = SAVE_PATH / PATH_TO_IMAGE[i][:-4]
+        else:
+            IMAGE_SAVE_PATH = SAVE_PATH / f"image_{i}"
+        IMAGE_SAVE_PATH.mkdir(exist_ok=True, parents=True)
+        
+        save_SVD(image, IMAGE_SAVE_PATH)
+
+def save_SVD(image, IMAGE_SAVE_PATH):
+    for i, color in enumerate(image):
+        COLOR_IMAGE_SAVE_PATH = IMAGE_SAVE_PATH / f"color_{i}"
+        COLOR_IMAGE_SAVE_PATH.mkdir(exist_ok=True, parents=True)
+        for i, tensor in enumerate(["U", "SIGMA", "VT"]):
+            torch.save(color[i], f"{COLOR_IMAGE_SAVE_PATH.absolute()}/{tensor}.pth")
+
+def load_SVD(PATH, images: dict):
+    transformer = v2.ToPILImage()
+    for i, path in enumerate(os.listdir(PATH)):
+        image_tensor = []
+        for i, path_ in enumerate(os.listdir(PATH / path)):
+            U = torch.load(f"{(PATH / f"{path}/{path_}/U.pth").absolute()}")
+            SIGMA = torch.diag(torch.load(f"{(PATH / f"{path}/{path_}/SIGMA.pth").absolute()}"))
+            VT = torch.load(f"{(PATH / f"{path}/{path_}/VT.pth").absolute()}")
+            image_tensor.append(torch.linalg.multi_dot([U, SIGMA, VT]))
+        images.update({f"{path}":transformer(torch.stack([image_tensor[0], image_tensor[1], image_tensor[2]], dim = 0))})
+    return images
+
+def delete_stuff(PATH):
+    if not PATH.exists():
+        return None
+    elif PATH.exists():
+        for path_ in os.listdir(PATH):
+            path = PATH / path_
+            if os.path.isfile(path) or os.path.islink(path):
+                os.remove(path)  
+            elif os.path.isdir(path):
+                shutil.rmtree(path)  
+            else:
+                raise ValueError("{} is not a file or dir.".format(path))
 
 def create_anki_deck(cards, deck_name):
     

@@ -104,7 +104,8 @@ with form:
 def save_deck(cards = flashcards, deck_name = deck_name, excluded = excluded, save_data = save_data):
     
     images = [card["image"] for i, card in enumerate(cards) if not excluded[i]]
-    
+    images_2 = [card["image"] for _, card in enumerate(cards)]
+
     texts = [{"front": card["front"], "back": card["back"]} for i, card in enumerate(cards) if not excluded[i]]
     
     def save_training_data(images, excluded):
@@ -142,7 +143,7 @@ def save_deck(cards = flashcards, deck_name = deck_name, excluded = excluded, sa
             image = image.save(fp = IMAGE_SAVE_PATH_FOR_TRAINING, format = "PNG")
     
     if save_data:
-        save_training_data(images, excluded)
+        save_training_data(images_2, excluded)
     
     
     DECK_DIR = Path("edited_decks")

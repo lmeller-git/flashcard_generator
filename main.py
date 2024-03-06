@@ -82,6 +82,7 @@ if delete_cards:
 def flashcards_from_large_file(file_, deck_name, mode, model):
     flashcards = []
     image_bytes_ = []
+    _images_ = []
     for file in file_:
         progress_text = f"Generating summaries for {file.name}. Please wait..."
         progress_bar = st.progress(0, text = progress_text) 
@@ -148,9 +149,10 @@ def flashcards_from_large_file(file_, deck_name, mode, model):
         flashcards_ = [{"summary": answers[i], "question": questions[i]} for i in range(len(questions))]
         flashcards += flashcards_
         image_bytes_ += image_bytes
+        _images_ += images_
         progress_bar.empty()
 
-    return flashcards, image_bytes_, images_
+    return flashcards, image_bytes_, _images_
     
 
 if submitter_large:
