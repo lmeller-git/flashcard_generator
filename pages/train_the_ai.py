@@ -229,7 +229,6 @@ with st.form("parameters"):
         pass
 
 
-
 if st.button("train ai"):
     
     if not PROCESSED_IMAGE_SAVE_PATH_FOR_TRAINING_FROM_SVD.exists():
