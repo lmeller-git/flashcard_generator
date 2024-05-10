@@ -53,7 +53,6 @@ transform = v2.Compose([
     v2.Resize(size=(64,64), antialias=True)
 ])
 
-
 try:
     images = [Image.open(f"training_data/Images/{file}") for file in list(os.walk(TRAINING_IMAGES_PATH))[0][2]]
 except:
